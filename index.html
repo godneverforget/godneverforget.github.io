@@ -15,6 +15,7 @@
         <div id="main-menu" class="menu-section">
             <h2>Главное меню</h2>
             <button id="new-game-btn">Новая игра</button>
+            <button id="view-games-btn">Список партий</button>
         </div>
 
         <div id="game-setup" class="menu-section hidden">
@@ -29,7 +30,7 @@
             </div>
             <div class="form-group">
                 <label for="mines-count">Количество мин:</label>
-                <input type="number" id="mines-count" min="1" max="50" value="15">
+                <input type="number" id="mines-count" min="1" max="99" value="15">
             </div>
             <button id="start-game-btn">Начать игру</button>
             <button id="back-to-menu-btn">Назад</button>
@@ -50,6 +51,7 @@
     </div>
 
     <script src="js/game.js"></script>
+    <script src="js/database.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/main.js"></script>
 </body>

@@ -72,6 +72,7 @@ button:disabled {
     cursor: not-allowed;
 }
 
+/* === Игровое поле === */
 #game-board {
     margin: 20px auto;
     display: grid;
@@ -90,6 +91,7 @@ button:disabled {
     background-color: #ddd;
     font-weight: bold;
     user-select: none;
+    font-size: 18px;
 }
 
 .cell.revealed {
@@ -109,6 +111,7 @@ button:disabled {
     background-color: #ff0000;
 }
 
+/* === Информация об игре === */
 .game-info {
     margin-bottom: 20px;
     padding: 10px;
@@ -126,3 +129,57 @@ button:disabled {
     font-weight: bold;
     font-size: 18px;
 }
+
+/* === Список партий === */
+#games-list-section {
+    text-align: left;
+    padding: 20px;
+}
+
+#games-list-section h2 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+#games-list {
+    margin: 20px 0;
+}
+
+#games-list table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+#games-list th,
+#games-list td {
+    border: 1px solid #ccc;
+    padding: 8px 12px;
+    text-align: left;
+}
+
+#games-list th {
+    background-color: #f0f0f0;
+}
+
+#games-list button {
+    padding: 6px 12px;
+    font-size: 14px;
+    margin: 2px;
+}
+
+/* Кнопка "Назад" в списке партий — выравнивание по центру */
+#games-list-section .back-btn {
+    display: block;
+    margin: 20px auto;
+}
+
+/* Цвета цифр (опционально — улучшает читаемость) */
+.cell.revealed[data-number="1"] { color: blue; }
+.cell.revealed[data-number="2"] { color: green; }
+.cell.revealed[data-number="3"] { color: red; }
+.cell.revealed[data-number="4"] { color: darkblue; }
+.cell.revealed[data-number="5"] { color: brown; }
+.cell.revealed[data-number="6"] { color: teal; }
+.cell.revealed[data-number="7"] { color: black; }
+.cell.revealed[data-number="8"] { color: gray; }

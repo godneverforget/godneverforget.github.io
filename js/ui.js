@@ -1,12 +1,19 @@
 class GameUI {
-    constructor() {
+    constructor(db) {
+        this.db = db;
         this.game = null;
+        this.moveHistory = []; // ← для сохранения ходов
+        this.isReplaying = false;
+        this.replayMoves = [];
+        this.replayIndex = 0;
+
         this.initializeEventListeners();
     }
 
     initializeEventListeners() {
         // Главное меню
         document.getElementById('new-game-btn').addEventListener('click', () => this.showGameSetup());
+        document.getElementById('view-games-btn').addEventListener('click', () => this.showGamesList());
         
         // Настройка игры
         document.getElementById('start-game-btn').addEventListener('click', () => this.startNewGame());
@@ -27,8 +34,14 @@ class GameUI {
     }
 
     hideAllSections() {
-        const sections = document.querySelectorAll('.menu-section, #game-section');
-        sections.forEach(section => section.classList.add('hidden'));
+        const sections = document.querySelectorAll('.menu-section, #game-section, #games-list-section');
+        sections.forEach(section => {
+            if (section.id === 'games-list-section') {
+                section.remove();
+            } else {
+                section.classList.add('hidden');
+            }
+        });
     }
 
     startNewGame() {
@@ -52,6 +65,9 @@ class GameUI {
         }
 
         this.game = new MinesweeperGame(size, minesCount, playerName);
+        this.moveHistory = [];
+        this.isReplaying = false;
+
         this.showGameInterface();
         this.renderBoard();
     }
@@ -120,6 +136,17 @@ class GameUI {
         if (this.game.gameOver) return;
 
         const result = this.game.revealCell(x, y);
+
+        // Сохраняем ход только при обычной игре
+        if (!this.isReplaying) {
+            const moveResult = 
+                result === 'mine' ? 'взорвался' :
+                result === 'win'  ? 'выиграл' :
+                'мины нет';
+            
+            this.moveHistory.push({ x, y, result: moveResult });
+        }
+
         this.renderBoard();
         this.updateGameStatus();
 
@@ -160,6 +187,185 @@ class GameUI {
         } else {
             statusElement.textContent = `Игра идет... Осталось мин: ${this.game.getRemainingMines()}`;
             statusElement.style.color = 'black';
+        }
+
+        // 🔥 Автосохранение при окончании игры
+        if ((this.game.gameWon || this.game.gameOver) && !this.isReplaying && this.moveHistory.length > 0) {
+            this.saveGameToDB();
+        }
+    }
+
+    async saveGameToDB() {
+        if (!this.db) return;
+
+        try {
+            const gameData = {
+                player: this.game.playerName,
+                size: this.game.size,
+                mines: this.game.minesCount,
+                minePositions: this.game.minePositions,
+                status: this.game.gameWon ? 'win' : 'lose',
+                moves: this.moveHistory
+            };
+
+            const gameId = await this.db.saveGame(gameData);
+            console.log(`Игра сохранена в БД под ID: ${gameId}`);
+        } catch (error) {
+            console.error('Ошибка сохранения игры:', error);
+            alert('Не удалось сохранить игру. Проверьте консоль.');
+        }
+    }
+
+    // =================== СПИСОК ПАРТИЙ ===================
+    async showGamesList() {
+        this.hideAllSections();
+        const container = document.createElement('div');
+        container.id = 'games-list-section';
+        container.className = 'menu-section';
+        container.innerHTML = `
+            <h2>Сохранённые партии</h2>
+            <div id="games-list"><p>Загрузка...</p></div>
+            <button id="back-to-menu-from-list">← Назад</button>
+        `;
+        document.querySelector('.container').appendChild(container);
+
+        try {
+            const games = await this.db.getAllGames();
+            const listEl = document.getElementById('games-list');
+            
+            if (games.length === 0) {
+                listEl.innerHTML = '<p>Нет сохранённых партий.</p>';
+            } else {
+                const table = document.createElement('table');
+                table.innerHTML = `
+                    <thead>
+                        <tr>
+                            <th>Дата</th>
+                            <th>Игрок</th>
+                            <th>Поле</th>
+                            <th>Мины</th>
+                            <th>Исход</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                `;
+                const tbody = table.querySelector('tbody');
+
+                games.forEach(game => {
+                    const row = document.createElement('tr');
+                    const date = new Date(game.date).toLocaleString('ru-RU', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                    const statusText = game.status === 'win' ? 'Победа 🏆' : 'Поражение 💣';
+                    row.innerHTML = `
+                        <td>${date}</td>
+                        <td>${game.player || '—'}</td>
+                        <td>${game.size}×${game.size}</td>
+                        <td>${game.mines}</td>
+                        <td>${statusText}</td>
+                        <td>
+                            <button class="replay-btn" data-id="${game.id}">Повторить</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+                listEl.innerHTML = '';
+                listEl.appendChild(table);
+
+                // Обработчик повтора
+                document.querySelectorAll('.replay-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const gameId = e.target.dataset.id;
+                        this.startReplay(gameId);
+                    });
+                });
+            }
+
+            document.getElementById('back-to-menu-from-list').addEventListener('click', () => {
+                container.remove();
+                this.showMainMenu();
+            });
+
+        } catch (error) {
+            console.error(error);
+            document.getElementById('games-list').innerHTML = 
+                `<p style="color:red">Ошибка загрузки: ${error.message}</p>`;
+        }
+    }
+
+    // =================== РЕЖИМ ВОСПРОИЗВЕДЕНИЯ ===================
+    async startReplay(gameId) {
+        try {
+            const gameData = await this.db.getGameById(gameId);
+            const moves = await this.db.getGameMoves(gameId);
+
+            if (!gameData || !Array.isArray(moves) || moves.length === 0) {
+                alert('Невозможно загрузить игру: данные повреждены.');
+                return;
+            }
+
+            // Создаём новую игру с ТЕМИ ЖЕ параметрами
+            this.game = new MinesweeperGame(gameData.size, gameData.mines, gameData.player);
+            
+            // 🔥 Восстанавливаем ТОЧНУЮ расстановку мин
+            this.game.minePositions = gameData.minePositions;
+            this.game.initializeBoard(); // сброс доски
+
+            gameData.minePositions.forEach(pos => {
+                if (this.game.isValidPosition(pos.x, pos.y)) {
+                    this.game.board[pos.x][pos.y].isMine = true;
+                }
+            });
+            this.game.calculateNumbers();
+
+            // Подготавливаем воспроизведение
+            this.isReplaying = true;
+            this.replayMoves = moves;
+            this.replayIndex = 0;
+            this.moveHistory = []; // не сохраняем при воспроизведении
+
+            this.showGameInterface();
+            this.renderBoard();
+
+            // Запускаем первый ход с задержкой
+            setTimeout(() => this.playNextMove(), 800);
+        } catch (error) {
+            console.error('Ошибка воспроизведения:', error);
+            alert('Не удалось загрузить игру для повтора.');
+        }
+    }
+
+    playNextMove() {
+        if (this.replayIndex >= this.replayMoves.length || this.game.gameOver) {
+            return;
+        }
+
+        const move = this.replayMoves[this.replayIndex];
+
+        // В оригинале: только открытие ячейки (без флагов — по ТЗ)
+        this.game.revealCell(move.x, move.y);
+        this.renderBoard();
+        this.updateGameStatus();
+
+        console.log(`[Replay] Ход ${move.moveNumber}: (${move.x}, ${move.y}) → ${move.result}`);
+
+        this.replayIndex++;
+
+        if (!this.game.gameOver && this.replayIndex < this.replayMoves.length) {
+            setTimeout(() => this.playNextMove(), 600);
+        } else {
+            const resultText = this.game.gameWon 
+                ? 'Победа! 🎉' 
+                : 'Поражение. 💣';
+            setTimeout(() => {
+                alert(`Воспроизведение завершено.\n${resultText}`);
+            }, 500);
         }
     }
 }
